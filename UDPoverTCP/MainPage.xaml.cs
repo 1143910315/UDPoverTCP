@@ -11,9 +11,21 @@ namespace UDPoverTCP {
         private Socket? _clientSocket;
         private readonly Lock _connectionLock = new();
         private Socket? _activeTcpConnection;
-        private IPEndPoint lastUdpTargetEndPoint = new IPEndPoint(IPAddress.Any, 0);
+        private IPEndPoint lastUdpTargetEndPoint = new(IPAddress.Any, 0);
+        private int unpackCount = 0;
+        private int packCount = 0;
+        private readonly IDispatcherTimer _refreshTimer;
         public MainPage() {
             InitializeComponent();
+            _refreshTimer = Dispatcher.CreateTimer();
+            _refreshTimer.Interval = TimeSpan.FromMilliseconds(500);
+            _refreshTimer.Tick += (s, e) => {
+                InfoLabel.Text = $"总解包数：{unpackCount}，总打包数：{packCount}";
+            };
+            _refreshTimer.Start();
+            ListenPortEntry.Text = Preferences.Get("ListenPort", "8720");
+            ClientPortEntry.Text = Preferences.Get("ClientPort", "8720");
+            ForwardAddressEntry.Text = Preferences.Get("ForwardAddress", "127.0.0.1:8721");
         }
         private async void TcpListenButton_Clicked(object sender, EventArgs e) {
             await StartTcpProxy().ConfigureAwait(false);
@@ -78,7 +90,7 @@ namespace UDPoverTCP {
 
                 // 创建客户端UDP Socket
                 _clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-                _clientSocket.Bind(new IPEndPoint(IPAddress.Any, udpPort));
+                _clientSocket.Bind(new IPEndPoint(IPAddress.Parse("127.0.0.1"), udpPort));
 
                 IPEndPoint targetEndPoint = await ParseEndpointAsync(ForwardAddressEntry.Text).ConfigureAwait(false);
                 lastUdpTargetEndPoint = targetEndPoint;
@@ -102,18 +114,21 @@ namespace UDPoverTCP {
 
             try {
                 _cancellationSource = new CancellationTokenSource();
-                var token = _cancellationSource.Token;
-
+                CancellationToken token = _cancellationSource.Token;
+                int udpPort = int.Parse(ListenPortEntry.Text);
                 // 创建监听Socket
                 _activeTcpConnection = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-                _activeTcpConnection.Bind(new IPEndPoint(IPAddress.Any, int.Parse(ClientPortEntry.Text)));
                 IPEndPoint targetEndPoint = await ParseEndpointAsync(ForwardAddressEntry.Text).ConfigureAwait(false);
                 _activeTcpConnection.Connect(targetEndPoint);
                 lastUdpTargetEndPoint = targetEndPoint;
 
                 // 创建客户端UDP Socket
                 _clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-                _clientSocket.Bind(new IPEndPoint(IPAddress.Any, int.Parse(ListenPortEntry.Text)));
+                _clientSocket.Bind(new IPEndPoint(IPAddress.Parse("127.0.0.1"), udpPort));
+
+                Application.Current?.Dispatcher.Dispatch(() => {
+                    LogEditor.Text += $"[{DateTime.Now:HH:mm:ss}] INFO: UDP监听{udpPort}，TCP发送到{targetEndPoint}\n";
+                });
 
                 // 启动TCP监听任务
                 _ = Task.Run(() => HandleTcpConnection(_activeTcpConnection, _clientSocket, token), token);
@@ -180,6 +195,7 @@ namespace UDPoverTCP {
                         if (dataBuffer.Count < packetSize + 4) {
                             break;
                         }
+                        Interlocked.Increment(ref unpackCount);
 
                         // 提取数据包
                         byte[] packetData = [.. dataBuffer.GetRange(4, packetSize)];
@@ -222,6 +238,7 @@ namespace UDPoverTCP {
                     }
 
                     if (sendSocket?.Connected == true) {
+                        Interlocked.Increment(ref packCount);
                         await sendSocket.SendAsync(buffer.AsMemory(0, result.ReceivedBytes + 4), SocketFlags.None, token);
                     }
                 }
@@ -328,6 +345,18 @@ namespace UDPoverTCP {
             } catch (Exception ex) {
                 LogEditor.Text += ex;
             }
+        }
+
+        private void ListenPortEntry_TextChanged(object sender, TextChangedEventArgs e) {
+            Preferences.Set("ListenPort", ListenPortEntry.Text);
+        }
+
+        private void ClientPortEntry_TextChanged(object sender, TextChangedEventArgs e) {
+            Preferences.Set("ClientPort", ClientPortEntry.Text);
+        }
+
+        private void ForwardAddressEntry_TextChanged(object sender, TextChangedEventArgs e) {
+            Preferences.Set("ForwardAddress", ForwardAddressEntry.Text);
         }
     }
 }

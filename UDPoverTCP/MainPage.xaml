@@ -20,7 +20,8 @@
                         x:Name="ListenPortEntry"
                         VerticalOptions="Center"
                         WidthRequest="80"
-                        Text="8720"></Entry>
+                        Text="8720"
+                        TextChanged="ListenPortEntry_TextChanged"></Entry>
                 </HorizontalStackLayout>
                 <HorizontalStackLayout>
                     <Label
@@ -30,7 +31,8 @@
                          x:Name="ClientPortEntry"
                         VerticalOptions="Center"
                         WidthRequest="80"
-                        Text="8720"></Entry>
+                        Text="8720"
+                        TextChanged="ClientPortEntry_TextChanged"></Entry>
                 </HorizontalStackLayout>
             </HorizontalStackLayout>
             <HorizontalStackLayout
@@ -42,7 +44,8 @@
                     x:Name="ForwardAddressEntry"
                     VerticalOptions="Center"
                     WidthRequest="380"
-                    Text="127.0.0.1:8721"></Entry>
+                    Text="127.0.0.1:8721"
+                    TextChanged="ForwardAddressEntry_TextChanged"></Entry>
             </HorizontalStackLayout>
             <HorizontalStackLayout
                 Padding="0,10"
@@ -54,6 +57,7 @@
                     Text="用UDP监听端口用TCP转发"
                     Clicked="UdpListenButton_Clicked"></Button>
             </HorizontalStackLayout>
+            <Label x:Name="InfoLabel"></Label>
         </VerticalStackLayout>
         <Grid
             Padding="15"
